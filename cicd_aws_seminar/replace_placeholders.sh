@@ -27,13 +27,30 @@ fi
 
 # jq を使って OutputKey から各値を取り出す
 # ※テンプレート内の OutputKey 名（ConnectionArn, RdsEndpoint 等）に合わせて適宜調整してください
-export CONNECTION_ARN=$(echo $STDOUT | jq -r '.[] | select(.OutputKey=="ConnectionArn") | .OutputValue')
 export RDS_ENDPOINT=$(echo $STDOUT | jq -r '.[] | select(.OutputKey=="RdsEndpoint") | .OutputValue')
 export ALB_HTTP_LISTENER_ARN=$(echo $STDOUT | jq -r '.[] | select(.OutputKey=="AlbHttpListenerArn") | .OutputValue')
 export ALB_TEST_LISTENER_ARN=$(echo $STDOUT | jq -r '.[] | select(.OutputKey=="AlbTestListenerArn") | .OutputValue')
 
-# アカウントIDだけは共通情報なので別途取得
+# ==============================================================================
+# 3. CodeStar Connections から CONNECTION_ARN 取得
+# ==============================================================================
+echo "🔗 CodeStar Connection ARN を取得"
+
+export CONNECTION_ARN=$(aws codestar-connections list-connections \
+  --query "Connections[?ConnectionName=='cs-conn-${USER_NAME_DATE}'].ConnectionArn" \
+  --output text \
+  --region "${REGION}")
+
+if [ -z "$CONNECTION_ARN" ] || [ "$CONNECTION_ARN" = "None" ]; then
+  echo "❌ CodeStar Connection が見つかりません: cs-conn-${USER_NAME_DATE}"
+  exit 1
+fi
+
+# ==============================================================================
+# 5. 共通情報
+# ==============================================================================
 export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
 
 # ==============================================================================
 # 3. 置換処理
