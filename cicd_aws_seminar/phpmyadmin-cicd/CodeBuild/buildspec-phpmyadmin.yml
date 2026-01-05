@@ -1,0 +1,22 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_DEFAULT_REGION: "ap-northeast-1"
+    CONTAINER_NAME: "phpmyadmin"
+    IMAGE_URI: "phpmyadmin:5.2.1" # <-- EDIT: 公式イメージ or ECR URI
+
+phases:
+  pre_build:
+    commands:
+      - echo "No docker build required for phpmyadmin (using existing image $IMAGE_URI)"
+  build:
+    commands:
+      - echo "Skipping build"
+  post_build:
+    commands:
+      - echo "Create imagedefinitions.json for phpmyadmin"
+      - printf '[{"name":"%s","imageUri":"%s"}]' $CONTAINER_NAME $IMAGE_URI > imagedefinitions.json
+artifacts:
+  files:
+    - imagedefinitions.json
