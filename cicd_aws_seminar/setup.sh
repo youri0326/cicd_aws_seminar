@@ -617,6 +617,7 @@ aws codepipeline delete-pipeline \
   --region ${REGION} || echo "CodePipeline not found"
 
 #② CodeBuildの削除
+#CodeBuildの削除
 aws codebuild delete-project \
   --name php-build-${USER_NAME_DATE} \
   --region ${REGION} || echo "php build project not found"
@@ -624,6 +625,16 @@ aws codebuild delete-project \
 aws codebuild delete-project \
   --name phpmyadmin-build-${USER_NAME_DATE} \
   --region ${REGION} || echo "phpMyAdmin build project not found"
+
+# CodeBuild ログの削除
+aws logs delete-log-group \
+  --log-group-name "/aws/codebuild/phpmyadmin-build-${USER_NAME_DATE}" \
+  --region ${REGION} || echo "phpMyAdmin CodeBuild log group not found"
+
+aws logs delete-log-group \
+  --log-group-name "/aws/codebuild/php-build-${USER_NAME_DATE}" \
+  --region ${REGION} || echo "PHP CodeBuild log group not found"
+
 
 #③ CodeDeployの削除
 # グループ名を取得
