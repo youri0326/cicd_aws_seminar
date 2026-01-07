@@ -222,6 +222,11 @@ aws codestar-connections create-connection \
 export USER_NAME="（ここに苗字を入力してください）" 
 # 日付（例: 1019）
 export DATE="（ここに本日の月日を入力してください）" 
+#リージョンの設定
+export REGION="ap-northeast-1" 
+
+#GITHUBユーザーの設定
+export GITHUB_USER="（ここにGITHUBのユーザー名を入力してください）"
 
 # ------------------------------
 # ② 置換用の実行ファイルの実行
@@ -635,7 +640,6 @@ aws logs delete-log-group \
   --log-group-name "/aws/codebuild/php-build-${USER_NAME_DATE}" \
   --region ${REGION} || echo "PHP CodeBuild log group not found"
 
-
 #③ CodeDeployの削除
 # グループ名を取得
 DG_NAME="cicd-aws-codedeploy-php-group"
@@ -699,7 +703,20 @@ aws ecr delete-repository \
 # ------------------------------
 # 8-4. ALB / Target Groupの削除
 # ------------------------------
-# ① ターゲットグループの削除
+# ① ALB(ロードバランサー)の削除
+# ロードバランサー名の取得
+ALB_NAME="alb-${USER_NAME_DATE}"
+
+# ロードバランサーARNの取得
+ALB_ARN=$(aws elbv2 describe-load-balancers \
+  --names "${ALB_NAME}" \
+  --query "LoadBalancers[0].LoadBalancerArn" \
+  --output text --region ${REGION} 2>/dev/null || true)
+
+#ロードバランサーの削除
+aws elbv2 delete-load-balancer --load-balancer-arn "${ALB_ARN}" --region ${REGION}
+
+# ② ターゲットグループの削除
 #Blue ターゲットグループ名の取得
 TG_ARN_BLUE=$(aws elbv2 describe-target-groups \
   --names "php-blue-tg-${USER_NAME_DATE}" \
@@ -717,15 +734,6 @@ TG_ARN_GREEN=$(aws elbv2 describe-target-groups \
 
 #Greenターゲットグループの削除
 aws elbv2 delete-target-group --target-group-arn "${TG_ARN_GREEN}" --region ${REGION}
-
-# ② ALB(ロードバランサー)の削除
-# ロードバランサー名の取得
-ALB_NAME="alb-${USER_NAME_DATE}"
-
-#ロードバランサーの削除
-aws elbv2 delete-load-balancer \
-  --name ${ALB_NAME} \
-  --region ${REGION} || echo "ALB not found"
 
 # ------------------------------
 # 8-5. CodeStar Connectionの削除
@@ -745,6 +753,27 @@ aws codestar-connections delete-connection \
 # ------------------------------
 #バケット内のすべてのオブジェクトを削除
 aws s3 rm s3://cicd-${USER_NAME_DATE}/ --recursive
+
+#過去バージョンのオブジェクトを削除
+baket_object=$(aws s3api list-object-versions \
+    --bucket cicd-${USER_NAME_DATE} \
+    --query='{Objects: Versions[].{Key:Key,VersionId:VersionId}}' \
+    --output=json)
+
+aws s3api delete-objects \
+  --bucket cicd-${USER_NAME_DATE} \
+  --delete "${baket_object}"
+
+#DeleteMarker を削除する
+delete_markers=$(aws s3api list-object-versions \
+  --bucket cicd-${USER_NAME_DATE} \
+  --query='{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' \
+  --output=json)
+
+aws s3api delete-objects \
+  --bucket cicd-${USER_NAME_DATE} \
+  --delete "${delete_markers}"
+
 # バケット自体を削除
 aws s3api delete-bucket --bucket cicd-${USER_NAME_DATE}
 
