@@ -10,29 +10,41 @@ if [ -z "$USER_NAME" ] || [ -z "$DATE" ] || [ -z "$GITHUB_USER" ]; then
 fi
 
 export USER_NAME_DATE="${USER_NAME}-${DATE}"
-export STACK_NAME="cicd-${USER_NAME_DATE}"
+# export STACK_NAME="cicd-${USER_NAME_DATE}"
 
-echo "🔍 CloudFormation スタック [ $STACK_NAME ] から情報を一括取得します..."
-
-# ==============================================================================
-# 2. CloudFormation Outputs から一括取得
-# ==============================================================================
-# describe-stacks の結果を変数に格納
-STDOUT=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Outputs" --output json)
-
-if [ $? -ne 0 ]; then
-    echo "❌ エラー: スタックが見つかりません。名前を確認してください: $STACK_NAME"
-    exit 1
-fi
-
-# jq を使って OutputKey から各値を取り出す
-# ※テンプレート内の OutputKey 名（ConnectionArn, RdsEndpoint 等）に合わせて適宜調整してください
-export RDS_ENDPOINT=$(echo $STDOUT | jq -r '.[] | select(.OutputKey=="RdsEndpoint") | .OutputValue')
-export ALB_HTTP_LISTENER_ARN=$(echo $STDOUT | jq -r '.[] | select(.OutputKey=="AlbHttpListenerArn") | .OutputValue')
-export ALB_TEST_LISTENER_ARN=$(echo $STDOUT | jq -r '.[] | select(.OutputKey=="AlbTestListenerArn") | .OutputValue')
+# echo "🔍 CloudFormation スタック [ $STACK_NAME ] から情報を一括取得します..."
 
 # ==============================================================================
-# 3. CodeStar Connections から CONNECTION_ARN 取得
+# 2. LisnerのARNの取得
+# ==============================================================================
+ALB_NAME="alb-${USER_NAME_DATE}"
+
+ALB_ARN=$(aws elbv2 describe-load-balancers \
+  --names "$ALB_NAME" \
+  --query "LoadBalancers[0].LoadBalancerArn" \
+  --output text)
+
+export ALB_HTTP_LISTENER_ARN=$(aws elbv2 describe-listeners \
+  --load-balancer-arn "$ALB_ARN" \
+  --query "Listeners[?Port==\`80\`].ListenerArn" \
+  --output text)
+
+export ALB_TEST_LISTENER_ARN=$(aws elbv2 describe-listeners \
+  --load-balancer-arn "$ALB_ARN" \
+  --query "Listeners[?Port==\`9000\`].ListenerArn" \
+  --output text)
+
+# ==============================================================================
+# 3. RDSのエンドポイントの取得
+# ==============================================================================
+
+export RDS_ENDPOINT=$(aws rds describe-db-instances \
+  --db-instance-identifier "db-${USER_NAME_DATE}" \
+  --query "DBInstances[0].Endpoint.Address" \
+  --output text)  
+
+# ==============================================================================
+# 4. CodeStar Connections から CONNECTION_ARN 取得
 # ==============================================================================
 echo "🔗 CodeStar Connection ARN を取得"
 
@@ -53,7 +65,7 @@ export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 
 # ==============================================================================
-# 3. 置換処理
+# 6. 置換処理
 # ==============================================================================
 # === 対象ディレクトリ（現在の実行場所）===
 export TARGET_DIR=$(pwd)
